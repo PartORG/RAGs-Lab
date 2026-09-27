@@ -1,6 +1,6 @@
 # docker compose up -d --build
 # docker compose exec ollama ollama pull qwen3:8b && docker compose exec ollama ollama pull nomic-embed-text
-# docker compose exec app python main.py adduser NAME
+# docker compose exec app rag-lab adduser NAME
 services:
   app:
     build: .

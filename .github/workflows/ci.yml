@@ -1,0 +1,101 @@
+name: CI
+
+# Every push and pull request: lint, test and install on Ubuntu and Windows, build the image.
+# A tag v* (e.g. v0.2.0) also publishes: a GitHub Release with the wheel and the installers, and
+# the image as ghcr.io/<owner>/<repo>:<version> and :latest.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
+
+  # The installers exactly as a user runs them, from this checkout, answering every question "no".
+  # Ollama is not installed here, so the doctor must report that, and fail.
+  install:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      RAG_LAB_NONINTERACTIVE: "1"
+      RAG_LAB_SOURCE: .
+    steps:
+      - uses: actions/checkout@v5
+      - if: runner.os == 'Linux'
+        run: |
+          bash install.sh
+          export PATH="$HOME/.local/bin:$PATH"  # where install.sh puts uv, if it installed it
+          "$(uv tool dir --bin)/rag-lab" doctor | tee doctor.txt || true
+          grep -F "[FAIL] Ollama: not installed" doctor.txt
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./install.ps1
+          $raglab = Join-Path (uv tool dir --bin) "rag-lab.exe"
+          & $raglab doctor | Tee-Object doctor.txt
+          if (-not (Select-String -Path doctor.txt -SimpleMatch "[FAIL] Ollama: not installed")) { exit 1 }
+          exit 0
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [install, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* install.sh install.ps1 --generate-notes

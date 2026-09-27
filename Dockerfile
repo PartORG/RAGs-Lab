@@ -8,8 +8,6 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PATH=/app/.venv/bin:$PATH
 # the image.
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --no-install-project
-COPY main.py ./
-COPY .streamlit .streamlit
 COPY src src
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev
 
@@ -26,4 +24,4 @@ VOLUME /data
 EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"
-CMD ["python", "main.py"]
+CMD ["rag-lab"]

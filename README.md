@@ -40,7 +40,47 @@ LangGraph and an agent framework; and **CRAG's web-search fallback is off by def
 with its sidebar checkbox, only the rewritten question goes to DuckDuckGo, never your documents —
 it is the one thing in this lab that leaves the machine.
 
-## Requirements
+## Install
+
+One command on Ubuntu (or any Linux, and macOS):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PartORG/RAGs-Lab/main/install.sh | bash
+```
+
+On Windows, in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/PartORG/RAGs-Lab/main/install.ps1 | iex"
+```
+
+The installer asks before anything beyond RAG Lab itself:
+
+1. installs [uv](https://docs.astral.sh/uv/) if it is missing (it also fetches Python 3.13 if
+   the system has no suitable one);
+2. installs the `rag-lab` command in its own environment, with the CPU build of torch (~1.5 GB);
+3. offers to install [Ollama](https://ollama.com) if it is missing — with Ollama's official
+   script on Linux (needs sudo), with `winget` on Windows;
+4. runs `rag-lab doctor`, and offers to pull the missing models;
+5. offers to create the first account.
+
+Then start it with `rag-lab`, which opens the page in the browser. Set `RAG_LAB_SOURCE` before
+running the installer to install something other than the main branch: a release wheel's URL,
+`rag-lab @ <URL of a tag's .zip>`, or `.` from a checkout.
+
+**`rag-lab doctor`** checks everything the lab needs and prints the fix for whatever is missing:
+Ollama installed and running, the required models (`--fix` pulls them), memory, free disk, the
+data folder, and whether an account exists. Required items fail with exit code 1; memory, disk
+and the optional models only warn.
+
+An installed RAG Lab keeps its data in `~/.local/share/rag-lab` on Linux,
+`%LOCALAPPDATA%\rag-lab` on Windows and `~/Library/Application Support/rag-lab` on macOS. Run from
+a source checkout, it uses `data/` in the checkout. `RAG_DATA` overrides both.
+
+**Update:** run the installer again. **Uninstall:** `uv tool uninstall rag-lab`, then delete the
+data folder if you want the accounts and documents gone.
+
+## Requirements (running from source)
 
 - Python 3.13+ and [uv](https://docs.astral.sh/uv/)
 - [Ollama](https://ollama.com) running locally:
@@ -61,12 +101,13 @@ it is the one thing in this lab that leaves the machine.
 reranker or the vision model on top has been enough to make Ubuntu's out-of-memory guard close
 the whole desktop session, so avoid running other heavy programs while using them.
 
-## Run
+## Run from source
 
 ```bash
 uv sync
-uv run main.py adduser ann      # create your first account (see Accounts below)
-uv run main.py                  # then open http://localhost:8501 and log in
+uv run rag-lab doctor           # check Ollama, models, memory, disk
+uv run rag-lab adduser ann      # create your first account (see Accounts below)
+uv run rag-lab                  # opens http://localhost:8501; log in
 ```
 
 Upload PDF/TXT/MD files in the sidebar — several at once — and press **Save & index**. Every
@@ -95,8 +136,9 @@ its whole tree). Measured on this laptop with qwen3:8b for the 224-page, 591-chu
 There is no sign-up page: whoever runs the lab creates the accounts from a terminal.
 
 ```bash
-uv run main.py adduser ann                          # locally
-docker compose exec app python main.py adduser ann  # in Docker
+rag-lab adduser ann                           # installed
+uv run rag-lab adduser ann                    # from source
+docker compose exec app rag-lab adduser ann   # in Docker
 ```
 
 It asks for the password twice and saves it as a salted scrypt hash. Rules:
@@ -117,8 +159,9 @@ click; the same happens after a password reset. An account later re-created unde
 starts empty:
 
 ```bash
-uv run main.py deluser ann                          # locally
-docker compose exec -it app python main.py deluser ann  # in Docker
+rag-lab deluser ann                             # installed
+uv run rag-lab deluser ann                      # from source
+docker compose exec -it app rag-lab deluser ann # in Docker
 ```
 
 **Upgrading from before accounts:** the old `data/*.json` indexes and `data/uploads/` are no
@@ -136,7 +179,7 @@ All optional, read from the environment:
 | `RAG_RERANK_MODEL` | `BAAI/bge-reranker-base` | Hugging Face cross-encoder |
 | `RAG_VISION_MODEL` | `qwen2.5vl:3b` | Multimodal RAG |
 | `RAG_DRAFT_MODEL` | `llama3.2:3b` | Speculative RAG's drafter |
-| `RAG_DATA` | `./data` | where `lab.db` and the uploads live |
+| `RAG_DATA` | see *Install* | where `lab.db` and the uploads live |
 | `RAG_LOG_LEVEL` | `INFO` | `DEBUG` also logs skipped PDF images |
 
 ### Logs
@@ -158,13 +201,29 @@ fact list) is logged as a warning, with the fallback taken.
 docker compose up -d --build
 docker compose exec ollama ollama pull qwen3:8b
 docker compose exec ollama ollama pull nomic-embed-text
-docker compose exec app python main.py adduser ann
+docker compose exec app rag-lab adduser ann
 ```
+
+Each release also publishes the image as `ghcr.io/partorg/rags-lab:<version>`; to run that instead
+of building, replace `build: .` in `compose.yaml` with `image: ghcr.io/partorg/rags-lab:latest`.
 
 The page is published on `127.0.0.1:8501` only: passwords travel over plain HTTP, so put an
 HTTPS reverse proxy in front before letting others reach it. Ollama runs on the CPU unless
 `nvidia-container-toolkit` is installed and the GPU block in `compose.yaml` is uncommented. The
 reranker is baked into the image; the data and the Ollama models live on named volumes.
+
+### CI and releases
+
+`.github/workflows/ci.yml` runs on every push and pull request: ruff and pytest on **Ubuntu and
+Windows**, both installers run for real from the checkout (answering every question "no", then
+checking that `rag-lab doctor` reports the missing Ollama), and a Docker build. Pushing a tag
+`v*` also publishes: a GitHub Release with the wheel and both installers attached, and the image
+on GHCR.
+
+```bash
+# bump version in pyproject.toml, commit, then:
+git tag v0.2.0 && git push origin main v0.2.0
+```
 
 ## Embeddings
 
@@ -274,9 +333,11 @@ name are always beside the colour and it never carries meaning alone.
 ## Layout
 
 ```
-main.py                     starts the Streamlit page; `adduser` / `deluser NAME` manage accounts
+src/rag_lab/cli.py          the `rag-lab` command: run, adduser, deluser, doctor
 Dockerfile, compose.yaml    the image, and the app + Ollama for `docker compose up`
-src/frontend/app.py         the Streamlit page
+src/rag_lab/app.py          the Streamlit page
+install.sh, install.ps1     the installers for Linux/macOS and Windows
+.github/workflows/ci.yml    tests, installer checks, image build; releases on a v* tag
 src/rags/<strategy>/rag.py  one retrieval strategy each; naive_rag holds the shared answer + grade
 src/chunking_strategies/    one chunking strategy each (see CHUNKING_STRATEGIES.md)
 src/embeddings/             one embedding model each (see EMBEDDINGS.md)

@@ -6,3 +6,6 @@ tests
 **/__pycache__
 .pytest_cache
 .ruff_cache
+.github
+install.sh
+install.ps1

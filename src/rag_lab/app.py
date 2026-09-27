@@ -110,7 +110,7 @@ def _kv(fields: dict) -> str:
 
 
 def login() -> None:
-    """The gate in front of everything: accounts are made with `uv run main.py adduser NAME`."""
+    """The gate in front of everything: accounts are made with `rag-lab adduser NAME`."""
     with st.form("login"):
         name = st.text_input("User name").strip()
         password = st.text_input("Password", type="password")
@@ -125,7 +125,7 @@ def login() -> None:
             # exposed beyond a trusted network.
             time.sleep(1)
             st.error("Wrong user name or password.")
-    st.caption("No account yet? The admin creates one with `uv run main.py adduser NAME`.")
+    st.caption("No account yet? The admin creates one with `rag-lab adduser NAME`.")
     st.stop()
 
 

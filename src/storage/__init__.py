@@ -1,5 +1,5 @@
-"""Everything the lab keeps, in one SQLite file (`data/lab.db`): the accounts, and every index of
-every user. Uploaded files and extracted figures stay files, under `data/users/<name>/`.
+"""Everything the lab keeps, in one SQLite file (`<data>/lab.db`): the accounts, and every index
+of every user. Uploaded files and extracted figures stay files, under `<data>/users/<name>/`.
 
 An index is one JSON document per (owner, name) row, the same JSON the index files used to hold.
 SQLite makes each save atomic and serialises concurrent writers, so two users uploading at once
@@ -14,11 +14,26 @@ import re
 import secrets
 import shutil
 import sqlite3
+import sys
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
-DATA = Path(os.environ.get("RAG_DATA") or Path(__file__).resolve().parents[2] / "data")
+
+def default_data() -> Path:
+    """`data/` beside the code in a source checkout, where development has always kept it; the
+    user's own data folder once installed, since the install folder is not theirs to write."""
+    checkout = Path(__file__).resolve().parents[2]
+    if (checkout / "pyproject.toml").exists():
+        return checkout / "data"
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "rag-lab"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "rag-lab"
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "rag-lab"
+
+
+DATA = Path(os.environ.get("RAG_DATA") or default_data())
 DB = DATA / "lab.db"
 # Names become folder names, so nothing that could climb out of data/users/.
 USERNAME = re.compile(r"[a-z0-9_-]{1,32}")
@@ -68,6 +83,10 @@ def saved_of(owner: str, prefix: str) -> list[Saved]:
         (owner, len(prefix), prefix),
     )
     return [Saved(owner, name) for (name,) in rows]
+
+
+def user_names() -> list[str]:
+    return [name for (name,) in _run("SELECT name FROM users ORDER BY name")]
 
 
 def user_dir(name: str) -> Path:
