@@ -68,7 +68,7 @@ SECTIONS: dict[str, dict[str, int]] = {
 def section(guide: str, key: str | None) -> str:
     """The `## N.` section for this dropdown key, heading included, up to the next `## `; the
     whole guide when there is no dropdown to follow (key None)."""
-    text = (HERE / guide).read_text()
+    text = (HERE / guide).read_text(encoding="utf-8")  # not the OS default: cp1252 on Windows
     if key is None:
         return text
     number = SECTIONS[guide][key]

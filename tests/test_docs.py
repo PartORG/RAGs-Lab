@@ -47,6 +47,7 @@ def test_mermaid_to_dot_shapes_labels_and_chains():
 def test_a_guide_without_a_dropdown_is_shown_whole_and_its_diagrams_convert():
     text = section("EVALUATION_STRATEGIES.md", None)
     assert text.startswith("# Evaluation Strategies")
+    assert "—" in text and "â€" not in text  # read as UTF-8 on every OS, not the locale's code page
     diagrams = re.findall(r"```mermaid\n(.*?)```", text, re.S)
     assert len(diagrams) == 15
     assert all(mermaid_to_dot(d) for d in diagrams)
