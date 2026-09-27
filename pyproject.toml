@@ -1,0 +1,46 @@
+[project]
+name = "rag-lab"
+version = "0.1.0"
+description = "A lab for building and comparing RAG strategies on local Ollama models."
+requires-python = ">=3.13"
+dependencies = [
+    "ddgs>=9.16.0",
+    "langchain-ollama>=1.1.0",
+    "langchain-text-splitters>=1.1.2",
+    "networkx>=3.6.1",
+    "numpy>=2.5.2",
+    "pypdf>=6.16.2",
+    "scikit-learn>=1.9.1",
+    "sentence-transformers>=6.1.0",
+    "streamlit>=1.62.0",
+    "torch>=2.14.0",  # declared only to pin the CPU build, see [tool.uv.sources]
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docs", "src/storage", "src/rags", "src/chunking_strategies", "src/embeddings", "src/retrievers"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# The in-process models (reranker, local embeddings) run on the CPU: Ollama has the GPU. The CPU
+# build of torch skips ~4 GB of CUDA libraries, locally and in the Docker image.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

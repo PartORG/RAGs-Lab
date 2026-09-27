@@ -1,0 +1,37 @@
+# docker compose up -d --build
+# docker compose exec ollama ollama pull qwen3:8b && docker compose exec ollama ollama pull nomic-embed-text
+# docker compose exec app python main.py adduser NAME
+services:
+  app:
+    build: .
+    # Localhost only: passwords travel in plain HTTP. To let others in, put an HTTPS reverse
+    # proxy in front, rather than publishing this port on the network.
+    ports: ["127.0.0.1:8501:8501"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      RAG_CHAT_MODEL: ${RAG_CHAT_MODEL:-qwen3:8b}
+      RAG_LOG_LEVEL: ${RAG_LOG_LEVEL:-INFO}
+    volumes: [data:/data]
+    # The reranker and a local embedding model fit well inside this; the cap makes Docker kill
+    # this container, instead of the kernel killing the desktop, if memory runs out.
+    mem_limit: 6g
+    depends_on:
+      ollama: { condition: service_healthy }
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes: [ollama:/root/.ollama]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+    restart: unless-stopped
+    # With nvidia-container-toolkit installed, uncomment to run the models on the GPU:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+volumes:
+  data:
+  ollama:
